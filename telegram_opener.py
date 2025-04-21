@@ -2,13 +2,14 @@ import telebot
 import MetaTrader5 as mt5
 import re
 import logging
+import os
 
 # --- CONFIGURATION ---
-TELEGRAM_BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'
-MT5_ACCOUNT = 12345678
-MT5_PASSWORD = 'your_mt5_password'
-MT5_SERVER = 'YourBroker-Server'
-AUTHORIZED_USER_IDS = [123456789]  # Replace with your Telegram user ID(s)
+TELEGRAM_BOT_TOKEN = os.getenv('MT5_PASSWORD', '')
+MT5_ACCOUNT = int(os.getenv('MT5_ACCOUNT', '0'))
+MT5_PASSWORD = os.getenv('MT5_PASSWORD', '')
+MT5_SERVER = os.getenv('MT5_SERVER', '')
+AUTHORIZED_USER_IDS = [6154595002]  # Replace with your Telegram user ID(s)
 TRADE_VOLUME = 0.1  # default lot size
 DEVIATION = 20
 

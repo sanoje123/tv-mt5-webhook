@@ -5,14 +5,14 @@ import os, hmac, hashlib, logging
 
 # Read config from env
 WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET', '').encode()
-MT5_LOGIN      = int(os.getenv('MT5_LOGIN', '0'))
+MT5_ACCOUNT      = int(os.getenv('MT5_ACCOUNT', '0'))
 MT5_PASSWORD   = os.getenv('MT5_PASSWORD', '')
 MT5_SERVER     = os.getenv('MT5_SERVER', '')
 
 # Initialize MT5
 print(MT5_SERVER)
 
-if not mt5.initialize(server=MT5_SERVER, login=MT5_LOGIN, password=MT5_PASSWORD):
+if not mt5.initialize(server=MT5_SERVER, login=MT5_ACCOUNT, password=MT5_PASSWORD):
     raise RuntimeError(f"MT5 init failed: {mt5.last_error()}")
 
 app = Flask(__name__)
