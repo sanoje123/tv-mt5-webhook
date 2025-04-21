@@ -10,6 +10,8 @@ MT5_PASSWORD   = os.getenv('MT5_PASSWORD', '')
 MT5_SERVER     = os.getenv('MT5_SERVER', '')
 
 # Initialize MT5
+print(MT5_SERVER)
+
 if not mt5.initialize(server=MT5_SERVER, login=MT5_LOGIN, password=MT5_PASSWORD):
     raise RuntimeError(f"MT5 init failed: {mt5.last_error()}")
 
