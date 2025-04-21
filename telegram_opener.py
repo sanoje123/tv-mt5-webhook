@@ -3,45 +3,62 @@ import MetaTrader5 as mt5
 import re
 import logging
 import os
+import sys
 
 # --- CONFIGURATION ---
-TELEGRAM_BOT_TOKEN = os.getenv('MT5_PASSWORD', '')
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
 MT5_ACCOUNT = int(os.getenv('MT5_ACCOUNT', '0'))
 MT5_PASSWORD = os.getenv('MT5_PASSWORD', '')
 MT5_SERVER = os.getenv('MT5_SERVER', '')
+# Optional: specify terminal path via env
+MT5_TERMINAL_PATH = os.getenv('MT5_TERMINAL_PATH', r"C:\Program Files\MetaTrader 5 IC Markets Global\terminal64.exe")
+
 AUTHORIZED_USER_IDS = [6154595002]  # Replace with your Telegram user ID(s)
-TRADE_VOLUME = 0.1  # default lot size
-DEVIATION = 20
+TRADE_VOLUME = float(os.getenv('TRADE_VOLUME', '0.1'))  # default lot size
+DEVIATION = int(os.getenv('DEVIATION', '20'))
 
 # --- LOGGER SETUP ---
-logging.basicConfig(filename='trade_bot.log', level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    filename='trade_bot.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 # --- INIT TELEGRAM BOT ---
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
 # --- MT5 CONNECTION ---
 def initialize_mt5():
-    if not mt5.initialize():
-        logging.error(f"MT5 Initialize failed: {mt5.last_error()}")
-        return False
-    if not mt5.login(MT5_ACCOUNT, password=MT5_PASSWORD, server=MT5_SERVER):
-        logging.error(f"MT5 Login failed: {mt5.last_error()}")
-        return False
-    return True
+    """
+    Initialize and login to MT5. Returns (True, '') on success, (False, error_message) on failure.
+    """
+    ok = mt5.initialize(
+        path=MT5_TERMINAL_PATH,
+        login=MT5_ACCOUNT,
+        password=MT5_PASSWORD,
+        server=MT5_SERVER
+    )
+    if not ok:
+        err = mt5.last_error()
+        logging.error(f"MT5 initialize/login failed: {err}")
+        return False, f"Initialize/login failed: {err}"
+    logging.info("MT5 initialized and logged in successfully.")
+    return True, ''
 
 # --- TRADE EXECUTION ---
 def open_trade(action, symbol, sl=None, tp=None):
     symbol = symbol.upper()
 
     if not mt5.symbol_select(symbol, True):
-        logging.error(f"Symbol not found or not available: {symbol}")
-        return f"❌ Symbol {symbol} not found or not available."
+        err = mt5.last_error()
+        logging.error(f"Symbol select failed for {symbol}: {err}")
+        return f"❌ Symbol select failed: {err}"
 
     tick = mt5.symbol_info_tick(symbol)
     if not tick:
-        logging.error(f"Failed to get tick data for {symbol}")
-        return f"❌ Failed to get tick data for {symbol}."
+        err = mt5.last_error()
+        logging.error(f"Tick fetch failed for {symbol}: {err}")
+        return f"❌ Failed to fetch tick data: {err}"
 
     price = tick.ask if action == 'BUY' else tick.bid
     order_type = mt5.ORDER_TYPE_BUY if action == 'BUY' else mt5.ORDER_TYPE_SELL
@@ -65,13 +82,12 @@ def open_trade(action, symbol, sl=None, tp=None):
     }
 
     result = mt5.order_send(request)
-
     if result.retcode != mt5.TRADE_RETCODE_DONE:
         logging.error(f"Order failed: {result.retcode} | {result.comment}")
         return f"❌ Order failed: {result.comment} (Code {result.retcode})"
-    else:
-        logging.info(f"Trade executed: {action} {symbol} SL={sl} TP={tp}")
-        return f"✅ Trade executed: {action} {symbol}\nSL: {sl or 'None'} | TP: {tp or 'None'}"
+
+    logging.info(f"Trade executed: {action} {symbol} SL={sl} TP={tp}")
+    return f"✅ Trade executed: {action} {symbol}\nSL: {sl or 'None'} | TP: {tp or 'None'}"
 
 # --- PARSE MESSAGES ---
 def parse_trade_signal(text):
@@ -88,9 +104,10 @@ def parse_trade_signal(text):
 # --- TELEGRAM HANDLER ---
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
-    if message.from_user.id not in AUTHORIZED_USER_IDS:
+    user_id = message.from_user.id
+    if user_id not in AUTHORIZED_USER_IDS:
         bot.reply_to(message, "⛔ Unauthorized user.")
-        logging.warning(f"Unauthorized access attempt by user {message.from_user.id}")
+        logging.warning(f"Unauthorized access attempt by user {user_id}")
         return
 
     parsed = parse_trade_signal(message.text)
@@ -98,8 +115,9 @@ def handle_message(message):
         bot.reply_to(message, "⚠️ Invalid format. Use: BUY|SELL SYMBOL [SL=...] [TP=...]")
         return
 
-    if not initialize_mt5():
-        bot.reply_to(message, "❌ Failed to connect to MetaTrader 5.")
+    success, err_msg = initialize_mt5()
+    if not success:
+        bot.reply_to(message, f"❌ Failed to connect to MetaTrader 5:\n{err_msg}")
         return
 
     result_msg = open_trade(
@@ -108,9 +126,13 @@ def handle_message(message):
         parsed.get("sl"),
         parsed.get("tp")
     )
-
     bot.reply_to(message, result_msg)
 
 # --- START BOT ---
-print("📡 Telegram MT5 Trade Bot is running...")
-bot.polling()
+if __name__ == '__main__':
+    print("📡 Telegram MT5 Trade Bot is running...")
+    try:
+        bot.polling()
+    except Exception as e:
+        logging.exception(f"Bot polling failed: {e}")
+        sys.exit(1)
